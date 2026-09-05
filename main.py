@@ -99,13 +99,37 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /admins കമാൻഡ് ഹാൻഡ്‌ലർ
 async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_text = (
-        "👑 **Admin Information**\n\n"
+        "👑 <b>Admin Information</b>\n\n"
         "If you need any support or want to contact the admin, please reach out to:\n"
-        "💬 **Contact:** @Anujith1238"
+        "💬 <b>Contact:</b> @Anujith1238"
     )
     keyboard = [[InlineKeyboardButton("👤 Chat with Admin", url="https://t.me/Anujith1238")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(admin_text, reply_markup=reply_markup, parse_mode="HTML")
+
+# /help കമാൻഡ് ഹാൻഡ്‌ലർ (ബൂട്ടിൽ /help അടിക്കുമ്പോൾ വർക്ക് ചെയ്യാൻ)
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "🤖 <b>Bot Help & Instructions Menu</b>\n\n"
+        "How to use this bot:\n"
+        "1️⃣ First, send your <b>Updates Channel ID</b> or Username (Where posts should arrive, and the bot <b>MUST be an Administrator</b>).\n"
+        "2️⃣ Second, send your <b>Database Channel ID</b> (Where you upload your files, and the bot <b>MUST be an Administrator</b>).\n"
+        "3️⃣ Third, send your target link/ID for the Get File button using any of these 3 ways:\n"
+        "   • <b>HTTP Link:</b> Send your URL link (e.g., <code>https://t.me/yourgroup</code>) -> File name will be automatically added to the end.\n"
+        "   • <b>Username:</b> Send your channel username (e.g., <code>@yourchannel</code>).\n"
+        "   • <b>Channel ID:</b> Send your group/channel ID (e.g., <code>-100xxxxxxxxxx</code>).\n"
+        "4️⃣ Fourth, select your preferred <b>File Format</b> (Text or Video format).\n"
+        "5️⃣ Finally, send your custom <b>Top Heading</b> text (Which will appear at the top of every post).\n\n"
+        "⚠️ <b>Important Note:</b>\n"
+        "This bot must be an <b>Administrator</b> in both channels! Otherwise, the bot will not work.\n\n"
+        "💬 <b>Contact Owner:</b>\n"
+        "For additional support, contact: @Anujith1238"
+    )
+    keyboard = [
+        [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode="HTML")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -113,24 +137,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "setup_channels":
         await query.message.edit_text(
-            "⚙️ **Channel Setup Wizard**\n\n"
-            "1️⃣ Please send your **Updates Channel ID** or Username (e.g., `-100xxxxxxxxxx` or `@yourchannel`):\n"
-            "⚠️ *(Make sure this bot is added as an **Administrator** in this Updates Channel)*"
+            "⚙️ <b>Channel Setup Wizard</b>\n\n"
+            "1️⃣ Please send your <b>Updates Channel ID</b> or Username (e.g., <code>-100xxxxxxxxxx</code> or <code>@yourchannel</code>):\n"
+            "⚠️ <i>(Make sure this bot is added as an <b>Administrator</b> in this Updates Channel)</i>",
+            parse_mode="HTML"
         )
         return GET_UPDATE_CHANNEL
 
     elif query.data == "help_menu":
         help_text = (
-            "🤖 **Bot Help & Instructions Menu**\n\n"
+            "🤖 <b>Bot Help & Instructions Menu</b>\n\n"
             "How to use this bot:\n"
-            "1️⃣ First, send your **Updates Channel ID** or Username (Where posts should arrive, and the bot **MUST be an Administrator**).\n"
-            "2️⃣ Second, send your **Database Channel ID** (Where you upload your files, and the bot **MUST be an Administrator**).\n"
-            "3️⃣ Third, send your **URL link, Channel/Group ID, or Bot Username** (for the Get File button target).\n"
-            "4️⃣ Fourth, select your preferred **File Format** (Text or Video format).\n"
-            "5️⃣ Finally, send your custom **Top Heading** text (Which will appear at the top of every post).\n\n"
-            "⚠️ **Important Note:**\n"
-            "This bot must be an **Administrator** in both channels! Otherwise, the bot will not work.\n\n"
-            "💬 **Contact Owner:**\n"
+            "1️⃣ First, send your <b>Updates Channel ID</b> or Username (Where posts should arrive, and the bot <b>MUST be an Administrator</b>).\n"
+            "2️⃣ Second, send your <b>Database Channel ID</b> (Where you upload your files, and the bot <b>MUST be an Administrator</b>).\n"
+            "3️⃣ Third, send your target link/ID for the Get File button using any of these 3 ways:\n"
+            "   • <b>HTTP Link:</b> Send your URL link (e.g., <code>https://t.me/yourgroup</code>) -> File name will be automatically added to the end.\n"
+            "   • <b>Username:</b> Send your channel username (e.g., <code>@yourchannel</code>).\n"
+            "   • <b>Channel ID:</b> Send your group/channel ID (e.g., <code>-100xxxxxxxxxx</code>).\n"
+            "4️⃣ Fourth, select your preferred <b>File Format</b> (Text or Video format).\n"
+            "5️⃣ Finally, send your custom <b>Top Heading</b> text (Which will appear at the top of every post).\n\n"
+            "⚠️ <b>Important Note:</b>\n"
+            "This bot must be an <b>Administrator</b> in both channels! Otherwise, the bot will not work.\n\n"
+            "💬 <b>Contact Owner:</b>\n"
             "For additional support, contact: @Anujith1238"
         )
         
@@ -163,8 +191,9 @@ async def get_update_channel_step(update: Update, context: ContextTypes.DEFAULT_
         
         await update.message.reply_text(
             "✅ Updates Channel saved successfully!\n\n"
-            "2️⃣ Now, please send your **Database Channel ID** (e.g., `-100xxxxxxxxxx`):\n"
-            "⚠️ *(Make sure this bot is added as an **Administrator** in your Database Channel)*"
+            "2️⃣ Now, please send your <b>Database Channel ID</b> (e.g., <code>-100xxxxxxxxxx</code>):\n"
+            "⚠️ <i>(Make sure this bot is added as an <b>Administrator</b> in your Database Channel)</i>",
+            parse_mode="HTML"
         )
         return GET_DB_CHANNEL
     except Exception as e:
@@ -178,7 +207,11 @@ async def get_db_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         await update.message.reply_text(
             "✅ Database Channel ID saved successfully!\n\n"
-            "3️⃣ Now, please send your **URL link, Channel/Group ID, or Bot Username** (for the Get File button target):"
+            "3️⃣ Now, send your target link/ID for the Get File button using one of these options:\n"
+            "• <code>https://...</code> (HTTP link with auto file name)\n"
+            "• <code>@yourchannel</code> (Channel Username)\n"
+            "• <code>-100xxxxxxxxxx</code> (Channel/Group ID)",
+            parse_mode="HTML"
         )
         return GET_TARGET_LINK
     except ValueError:
@@ -197,8 +230,9 @@ async def get_target_link_step(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await update.message.reply_text(
         "✅ Target Link/ID saved successfully!\n\n"
-        "4️⃣ Please select your preferred **File Format** (Text or Video):",
-        reply_markup=reply_markup
+        "4️⃣ Please select your preferred <b>File Format</b>:",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
     )
     return GET_FILE_FORMAT
 
@@ -210,7 +244,8 @@ async def get_file_format_step(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await query.message.edit_text(
         "✅ File Format saved successfully!\n\n"
-        "5️⃣ Finally, please type and send your custom **Top Heading** text (e.g., `🍁Anujith Allu TV Serials🍁`):"
+        "5️⃣ Finally, please type and send your custom <b>Top Heading</b> text (e.g., <code>🍁Anujith Allu TV Serials🍁</code>):",
+        parse_mode="HTML"
     )
     return GET_TOP_HEADING
 
@@ -226,13 +261,13 @@ async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYP
     save_user_config(user_id, update_channel, db_channel, target_link, file_format, top_heading)
 
     success_msg = (
-        "🎉 **Setup Successful!**\n\n"
+        "🎉 <b>Setup Successful!</b>\n\n"
         "Your configurations have been saved successfully:\n"
-        f"📢 **Updates Channel:** `{update_channel}`\n"
-        f"📁 **Database Channel:** `{db_channel}`\n"
-        f"🔗 **Target Link/ID:** `{target_link}`\n"
-        f"⚙️ **File Format:** `{file_format}`\n"
-        f"🏷 **Top Heading:** {top_heading}\n\n"
+        f"📢 <b>Updates Channel:</b> <code>{update_channel}</code>\n"
+        f"📁 <b>Database Channel:</b> <code>{db_channel}</code>\n"
+        f"🔗 <b>Target Link/ID:</b> <code>{target_link}</code>\n"
+        f"⚙️ <b>File Format:</b> <code>{file_format}</code>\n"
+        f"🏷 <b>Top Heading:</b> {top_heading}\n\n"
         "Your bot is now fully configured and ready to work!"
     )
 
@@ -286,14 +321,15 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quality_match = re.search(r'(480p|576p|720p|1080p)', clean_name, re.IGNORECASE)
     quality = quality_match.group(1) if quality_match else "720p"
 
-    # ഫയൽ പേര് ക്ലീൻ ചെയ്ത് തീയതികളും മാസങ്ങളും അധിക വാക്കുകളും ഒഴിവാക്കി കൃത്യമായ സീരിയൽ പേര് (ഉദാ: Karnan) മാത്രം എടുക്കൽ
-    title_part_match = re.split(r'(?:s0?\d+|ep?\s*\d+|episode|\b480p\b|\b576p\b|\b720p\b|\b1080p\b|\bweb\b|\b2020\b|\b2021\b|\b2022\b|\b2023\b|\b2024\b|\b2025\b|\b2026\b)', clean_name, flags=re.IGNORECASE)
+    # ഫയൽ പേര് ക്ലീൻ ചെയ്ത് തീയതികൾ, മാസങ്ങൾ, ഒടിടി പേരുകൾ ഒഴിവാക്കി കൃത്യമായ ഷോ പേര് മാത്രം എടുക്കൽ
+    title_part_match = re.split(r'(?:s0?\d+|ep?\s*\d+|episode|\b480p\b|\b576p\b|\b720p\b|\b1080p\b|\bweb\b|\bzee5\b|\bjiocinema\b|\bsunnxt\b|\bmanoramamax\b|\bjan\b|\bfeb\b|\bmar\b|\bapr\b|\bmay\b|\bjun\b|\bjul\b|\baug\b|\bsep\b|\boct\b|\bnov\b|\bdec\b|\b2020\b|\b2021\b|\b2022\b|\b2023\b|\b2024\b|\b2025\b|\b2026\b)', clean_name, flags=re.IGNORECASE)
     base_title = title_part_match[0].strip() if title_part_match else clean_name
 
     unwanted_words = [
         'ramesh', 'helps', 'nidhi', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 
         'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'snxt', 'web', 'dl', 'tamil', 
-        'malayalam', 'aac2', 'aac', 'h', '2020', '2021', '2022', '2023', '2024', '2025', '2026'
+        'malayalam', 'zee5', 'jiocinema', 'sunnxt', 'manoramamax', 'aac2', 'aac', 
+        'h', '2020', '2021', '2022', '2023', '2024', '2025', '2026'
     ]
     words = base_title.split()
     filtered_words = [w for w in words if w.lower() not in unwanted_words]
@@ -315,17 +351,28 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     encoded_title = quote(title_clean)
-    file_unique_link = f"https://telegram.me/Anujith1bot?start=getfile-{encoded_title}-S{season.zfill(2)}E{episode}"
     
-    if target_link and target_link.startswith("https://"):
-        keyboard = [
-            [InlineKeyboardButton("🔗 Visit Link", url=target_link)],
-            [InlineKeyboardButton("📥 Get File", url=file_unique_link)]
-        ]
+    # 3 രീതികളും ഇവിടെയാണ് ഹാൻഡിൽ ചെയ്യുന്നത്: https:// ലിങ്ക്, @username, അല്ലെങ്കിൽ -100... ചാനൽ ഐഡി
+    if target_link:
+        if target_link.startswith("https://"):
+            get_file_url = f"{target_link.rstrip('/')}/{encoded_title}-S{season.zfill(2)}E{episode}"
+        elif target_link.startswith("@"):
+            get_file_url = f"https://t.me/{target_link.lstrip('@')}"
+        elif target_link.startswith("-") or target_link.isdigit():
+            chat_id_clean = target_link.lstrip('-')
+            if chat_id_clean.startswith("100"):
+                get_file_url = f"https://t.me/c/{chat_id_clean[3:]}"
+            else:
+                get_file_url = f"https://t.me/c/{chat_id_clean}"
+        else:
+            get_file_url = f"https://t.me/{target_link}"
     else:
-        keyboard = [
-            [InlineKeyboardButton("📥 Get File", url=file_unique_link)]
-        ]
+        get_file_url = f"https://telegram.me/Anujith1bot?start=getfile-{encoded_title}-S{season.zfill(2)}E{episode}"
+
+    # Get File ബട്ടൺ മാത്രം നൽകുന്നു
+    keyboard = [
+        [InlineKeyboardButton("📥 Get File", url=get_file_url)]
+    ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -335,12 +382,23 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             chat_to_send = target_update_channel
 
-        await context.bot.send_message(
-            chat_id=chat_to_send,
-            text=caption_text,
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
+        if file_format == "Video" and (message.video or message.document):
+            await context.bot.copy_message(
+                chat_id=chat_to_send,
+                from_chat_id=incoming_chat_id,
+                message_id=message.message_id,
+                caption=caption_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_to_send,
+                text=caption_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+
         logger.info(f"Auto post sent successfully to channel: {target_update_channel}!")
     except Exception as e:
         logger.error(f"Error sending auto post: {e}")
@@ -366,14 +424,15 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("admins", admins_command))
     app.add_handler(setup_handler)
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.VIDEO | filters.Document.ALL | filters.TEXT), auto_post_handler))
 
-    print("Bot is running with fully corrected setup steps and advanced file name cleaning...")
+    print("Bot is running with fully corrected HTML tags, /help command, and 3 target options...")
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-                           
+    
