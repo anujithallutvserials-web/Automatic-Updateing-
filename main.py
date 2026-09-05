@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import sqlite3
+from urllib.parse import quote
 from flask import Flask
 from threading import Thread
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -14,17 +15,13 @@ from telegram.ext import (
     ConversationHandler,
     filters
 )
-from telegram.error import TelegramError
 
 # ലോഗിങ് സെറ്റ് ചെയ്യുക
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ഫോർസ് സബ്സ്ക്രൈബ് ചെയ്യേണ്ട മെയിൻ ചാനലുകൾ
-FORCE_SUB_CHANNELS = ["@Allutvserials", "@Anujith_Official1"]
-
-# കോൺവെർസേഷൻ സ്റ്റേറ്റുകൾ
-GET_DB_CHANNEL, GET_UPDATE_CHANNEL = range(2)
+# കോൺവെർസേഷൻ സ്റ്റേറ്റുകൾ (Setup States)
+GET_UPDATE_CHANNEL, GET_DB_CHANNEL, GET_TARGET_LINK, GET_FILE_FORMAT, GET_TOP_HEADING = range(5)
 
 # --- SQLITE DATABASE SETUP ---
 def init_db():
@@ -33,8 +30,11 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS configs (
             user_id INTEGER PRIMARY KEY,
+            update_channel TEXT,
             db_channel INTEGER,
-            update_channel TEXT
+            target_link TEXT,
+            file_format TEXT,
+            top_heading TEXT
         )
     ''')
     conn.commit()
@@ -42,24 +42,24 @@ def init_db():
 
 init_db()
 
-def save_user_config(user_id, db_channel, update_channel):
+def save_user_config(user_id, update_channel, db_channel, target_link, file_format, top_heading):
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR REPLACE INTO configs (user_id, db_channel, update_channel)
-        VALUES (?, ?, ?)
-    ''', (user_id, db_channel, update_channel))
+        INSERT OR REPLACE INTO configs (user_id, update_channel, db_channel, target_link, file_format, top_heading)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (user_id, update_channel, db_channel, target_link, file_format, top_heading))
     conn.commit()
     conn.close()
 
 def get_config_by_db(db_channel):
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT user_id, update_channel FROM configs WHERE db_channel = ?', (db_channel,))
+    cursor.execute('SELECT user_id, update_channel, target_link, file_format, top_heading FROM configs WHERE db_channel = ?', (db_channel,))
     row = cursor.fetchone()
     conn.close()
     if row:
-        return row[0], row[1]
+        return row[0], row[1], row[2], row[3], row[4]
     return None
 # -----------------------------
 
@@ -78,36 +78,7 @@ def keep_alive():
     t.start()
 # --------------------
 
-async def check_subscriptions(bot, user_id):
-    for channel in FORCE_SUB_CHANNELS:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                return False
-        except TelegramError:
-            return False
-    return True
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    is_subbed = await check_subscriptions(context.bot, user_id)
-    if not is_subbed:
-        keyboard = [
-            [InlineKeyboardButton("📢 Join Channel 1", url="https://t.me/Allutvserials")],
-            [InlineKeyboardButton("📢 Join Channel 2", url="https://t.me/Anujith_Official1")],
-            [InlineKeyboardButton("🔄 Try Again", callback_data="check_sub")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "<b>⚠️ Access Denied!</b>\n\n"
-            "You must join our channels first to use this bot. Please join both channels below and click 'Try Again'.",
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
-        return
-
     if context.args:
         payload = context.args[0]
         if payload.startswith("getfile-"):
@@ -118,50 +89,49 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("⚙️ Setup My Channels", callback_data="setup_channels")],
-        [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")]
+        [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")],
+        [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
+# /admins കമാൻഡ് ഹാൻഡ്‌ലർ
+async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    admin_text = (
+        "👑 **Admin Information**\n\n"
+        "If you need any support or want to contact the admin, please reach out to:\n"
+        "💬 **Contact:** @Anujith1238"
+    )
+    keyboard = [[InlineKeyboardButton("👤 Chat with Admin", url="https://t.me/Anujith1238")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(admin_text, reply_markup=reply_markup, parse_mode="HTML")
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    user_id = query.from_user.id
 
-    if query.data == "check_sub":
-        is_subbed = await check_subscriptions(context.bot, user_id)
-        if is_subbed:
-            welcome_text = "Hi, I am an automatically update bot"
-            keyboard = [
-                [InlineKeyboardButton("⚙️ Setup My Channels", callback_data="setup_channels")],
-                [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.edit_text(welcome_text, reply_markup=reply_markup)
-        else:
-            await query.answer("❌ Please join both channels first to proceed!", show_alert=True)
-
-    elif query.data == "setup_channels":
-        await query.message.reply_text(
+    if query.data == "setup_channels":
+        await query.message.edit_text(
             "⚙️ **Channel Setup Wizard**\n\n"
-            "Please send your **Database Channel ID** (e.g., `-100xxxxxxxxxx`):\n"
-            "*(Make sure this bot is added as an admin in your Database Channel)*"
+            "1️⃣ Please send your **Updates Channel ID** or Username (e.g., `-100xxxxxxxxxx` or `@yourchannel`):\n"
+            "⚠️ *(Make sure this bot is added as an **Administrator** in this Updates Channel)*"
         )
-        return GET_DB_CHANNEL
+        return GET_UPDATE_CHANNEL
 
     elif query.data == "help_menu":
         help_text = (
             "🤖 **Bot Help & Instructions Menu**\n\n"
-            "ഈ ബോട്ട് എങ്ങനെ ഉപയോഗിക്കാം? (How to use):\n"
-            "1️⃣ ബോട്ട് സ്റ്റാർട്ട് ചെയ്ത ശേഷം **'⚙️ Setup My Channels'** എന്ന ബട്ടൺ ക്ലിക്ക് ചെയ്യുക.\n"
-            "2️⃣ ആദ്യം നിങ്ങളുടെ **Database Channel ID** അയക്കുക (നിങ്ങൾ ഫയലുകൾ അപ്‌ലോഡ് ചെയ്യുന്ന ചാനൽ).\n"
-            "3️⃣ പിന്നീട് നിങ്ങളുടെ **Updates Channel ID** അല്ലെങ്കിൽ യൂസർനെയിം അയക്കുക (പോസ്റ്റുകൾ വരേേണ്ട ചാനൽ).\n\n"
-            "⚠️ **மிக முக்கிய ശ്രദ്ധിക്കുക (Important Note):**\n"
-            "നിങ്ങൾ നൽകുന്ന **ഡാറ്റാബേസ് ചാനലിലും (Database Channel)** അതുപോലെ **അപ്ഡേറ്റ്സ് ചാനലിലും (Updates Channel)** ഈ ബോട്ട് നിർബന്ധമായും **Administrator (അഡ്മിൻ)** ആയിരിക്കണം! എങ്കിൽ മാത്രമേ ബോട്ട് പ്രവർത്തനക്ഷമമാകൂ (Otherwise bot will be inactive).\n\n"
+            "How to use this bot:\n"
+            "1️⃣ First, send your **Updates Channel ID** or Username (Where posts should arrive, and the bot **MUST be an Administrator**).\n"
+            "2️⃣ Second, send your **Database Channel ID** (Where you upload your files, and the bot **MUST be an Administrator**).\n"
+            "3️⃣ Third, send your **URL link, Channel/Group ID, or Bot Username** (for the Get File button target).\n"
+            "4️⃣ Fourth, select your preferred **File Format** (Text or Video format).\n"
+            "5️⃣ Finally, send your custom **Top Heading** text (Which will appear at the top of every post).\n\n"
+            "⚠️ **Important Note:**\n"
+            "This bot must be an **Administrator** in both channels! Otherwise, the bot will not work.\n\n"
             "💬 **Contact Owner:**\n"
-            "കൂടുതൽ സഹായത്തിന് ബന്ധപ്പെടുക: @Anujith1238"
+            "For additional support, contact: @Anujith1238"
         )
         
         keyboard = [
@@ -175,10 +145,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text = "Hi, I am an automatically update bot"
         keyboard = [
             [InlineKeyboardButton("⚙️ Setup My Channels", callback_data="setup_channels")],
-            [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")]
+            [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")],
+            [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.edit_text(welcome_text, reply_markup=reply_markup)
+
+async def get_update_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text_input = update.message.text.strip()
+    try:
+        if text_input.startswith("@") or text_input.startswith("https://"):
+            update_chat_id = text_input
+        else:
+            update_chat_id = str(int(text_input))
+            
+        context.user_data['temp_update_channel'] = update_chat_id
+        
+        await update.message.reply_text(
+            "✅ Updates Channel saved successfully!\n\n"
+            "2️⃣ Now, please send your **Database Channel ID** (e.g., `-100xxxxxxxxxx`):\n"
+            "⚠️ *(Make sure this bot is added as an **Administrator** in your Database Channel)*"
+        )
+        return GET_DB_CHANNEL
+    except Exception as e:
+        await update.message.reply_text(f"❌ Invalid format: {e}\nPlease send a valid Channel ID or Username:")
+        return GET_UPDATE_CHANNEL
 
 async def get_db_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -186,38 +177,72 @@ async def get_db_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['temp_db_channel'] = db_chat_id
         
         await update.message.reply_text(
-            "✅ Database Channel ID saved!\n\n"
-            "Now, please send your **Updates Channel ID** or Username (e.g., `-100xxxxxxxxxx` or `@yourchannel`):\n"
-            "*(Make sure this bot is added as an admin in your Updates Channel as well)*"
+            "✅ Database Channel ID saved successfully!\n\n"
+            "3️⃣ Now, please send your **URL link, Channel/Group ID, or Bot Username** (for the Get File button target):"
         )
-        return GET_UPDATE_CHANNEL
+        return GET_TARGET_LINK
     except ValueError:
-        await update.message.reply_text("❌ Invalid ID! Please send a valid numeric Channel ID (Ex: -100123456789):")
+        await update.message.reply_text("❌ Invalid ID! Please send a valid numeric Database Channel ID (Ex: -100123456789):")
         return GET_DB_CHANNEL
 
-async def get_update_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_target_link_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_link_input = update.message.text.strip()
+    context.user_data['temp_target_link'] = target_link_input
+
+    keyboard = [
+        [InlineKeyboardButton("📄 Text Format", callback_data="fmt_text")],
+        [InlineKeyboardButton("🎬 Video Format", callback_data="fmt_video")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "✅ Target Link/ID saved successfully!\n\n"
+        "4️⃣ Please select your preferred **File Format** (Text or Video):",
+        reply_markup=reply_markup
+    )
+    return GET_FILE_FORMAT
+
+async def get_file_format_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data['temp_file_format'] = "Text" if query.data == "fmt_text" else "Video"
+
+    await query.message.edit_text(
+        "✅ File Format saved successfully!\n\n"
+        "5️⃣ Finally, please type and send your custom **Top Heading** text (e.g., `🍁Anujith Allu TV Serials🍁`):"
+    )
+    return GET_TOP_HEADING
+
+async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    text_input = update.message.text.strip()
-    
-    try:
-        if text_input.startswith("@"):
-            update_chat_id = text_input
-        else:
-            update_chat_id = str(int(text_input))
-            
-        db_channel = context.user_data.get('temp_db_channel')
-        
-        save_user_config(user_id, db_channel, update_chat_id)
-        
-        await update.message.reply_text(
-            "🎉 **Setup Successful!**\n\n"
-            "Your Database Channel and Updates Channel have been successfully linked.\n"
-            "Whenever you upload a video to your Database Channel, it will automatically post to your Updates Channel!"
-        )
-        return ConversationHandler.END
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error saving configuration: {e}\nPlease try again by clicking /start")
-        return ConversationHandler.END
+    top_heading = update.message.text.strip()
+
+    update_channel = context.user_data.get('temp_update_channel')
+    db_channel = context.user_data.get('temp_db_channel')
+    target_link = context.user_data.get('temp_target_link')
+    file_format = context.user_data.get('temp_file_format')
+
+    save_user_config(user_id, update_channel, db_channel, target_link, file_format, top_heading)
+
+    success_msg = (
+        "🎉 **Setup Successful!**\n\n"
+        "Your configurations have been saved successfully:\n"
+        f"📢 **Updates Channel:** `{update_channel}`\n"
+        f"📁 **Database Channel:** `{db_channel}`\n"
+        f"🔗 **Target Link/ID:** `{target_link}`\n"
+        f"⚙️ **File Format:** `{file_format}`\n"
+        f"🏷 **Top Heading:** {top_heading}\n\n"
+        "Your bot is now fully configured and ready to work!"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("⚙️ Setup Again", callback_data="setup_channels")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(success_msg, reply_markup=reply_markup, parse_mode="HTML")
+    return ConversationHandler.END
 
 async def cancel_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Setup cancelled.")
@@ -225,17 +250,15 @@ async def cancel_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post or update.message
-    
     if not message:
         return
 
     incoming_chat_id = message.chat.id
-    
     config = get_config_by_db(incoming_chat_id)
     if not config:
         return
 
-    user_id, target_update_channel = config
+    user_id, target_update_channel, target_link, file_format, top_heading = config
 
     file_name = ""
     if message.document:
@@ -260,72 +283,95 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         num_match = re.findall(r'\b(?:ep?|episode)?\s*(\d{1,4})\b', clean_name, re.IGNORECASE)
         episode = num_match[-1] if num_match else "01"
 
-    quality_match = re.search(r'(480p|720p|1080p)', clean_name, re.IGNORECASE)
+    quality_match = re.search(r'(480p|576p|720p|1080p)', clean_name, re.IGNORECASE)
     quality = quality_match.group(1) if quality_match else "720p"
 
-    title_clean = re.sub(
-        r's0?\d+|ep?\s*\d+|episode|\b\d+\b|\b480p\b|\b720p\b|\b1080p\b|\bget\b|\breadypass\b|\bready\b|\bfor\b|\ba\b|\bnon\b|\bstop\b|\bmkv\b|\bmp4\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b', 
-        '', 
-        clean_name, 
-        flags=re.IGNORECASE
-    )
+    # ഫയൽ പേര് ക്ലീൻ ചെയ്ത് തീയതികളും മാസങ്ങളും അധിക വാക്കുകളും ഒഴിവാക്കി കൃത്യമായ സീരിയൽ പേര് (ഉദാ: Karnan) മാത്രം എടുക്കൽ
+    title_part_match = re.split(r'(?:s0?\d+|ep?\s*\d+|episode|\b480p\b|\b576p\b|\b720p\b|\b1080p\b|\bweb\b|\b2020\b|\b2021\b|\b2022\b|\b2023\b|\b2024\b|\b2025\b|\b2026\b)', clean_name, flags=re.IGNORECASE)
+    base_title = title_part_match[0].strip() if title_part_match else clean_name
+
+    unwanted_words = [
+        'ramesh', 'helps', 'nidhi', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 
+        'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'snxt', 'web', 'dl', 'tamil', 
+        'malayalam', 'aac2', 'aac', 'h', '2020', '2021', '2022', '2023', '2024', '2025', '2026'
+    ]
+    words = base_title.split()
+    filtered_words = [w for w in words if w.lower() not in unwanted_words]
     
-    title_clean = re.sub(r'\s+', ' ', title_clean).strip()
-    if not title_clean:
+    if filtered_words:
+        title_clean = filtered_words[0]
+    else:
         title_clean = "Serial Video"
 
+    heading_to_show = top_heading if top_heading else "🍁Anujith Allu TV Serials🍁"
+
     caption_text = (
-        f"<b>🍁𝑨𝒏𝒖j𝒊𝒕𝒉 𝑨𝒍𝒍𝒖 𝑻𝑽 𝑺𝒆𝒓𝒊𝒂ls🍁</b>\n"
-        f"📁 <b>File Name :</b> {title_clean}\n"
+        f"<b>{heading_to_show}</b>\n"
+        f"📁 <b>File Name :</b> {file_name}\n"
         f"🎞 <b>Season :</b> {season.zfill(2)}\n"
         f"📌 <b>Episode :</b> {episode}\n"
-        f"🎬 <b>Quality :</b> {quality}"
+        f"🎬 <b>Quality :</b> {quality}\n"
+        f"📌 <b>Format :</b> {file_format}"
     )
 
-    formatted_title_for_link = title_clean.replace(" ", "")
-    file_unique_link = f"https://telegram.me/Anujith1bot?start=getfile-{formatted_title_for_link}-S{season.zfill(2)}E{episode}"
+    encoded_title = quote(title_clean)
+    file_unique_link = f"https://telegram.me/Anujith1bot?start=getfile-{encoded_title}-S{season.zfill(2)}E{episode}"
     
-    keyboard = [
-        [InlineKeyboardButton("📥 Get File", url=file_unique_link)]
-    ]
+    if target_link and target_link.startswith("https://"):
+        keyboard = [
+            [InlineKeyboardButton("🔗 Visit Link", url=target_link)],
+            [InlineKeyboardButton("📥 Get File", url=file_unique_link)]
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("📥 Get File", url=file_unique_link)]
+        ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
+        if target_update_channel.startswith("@" ) or target_update_channel.lstrip('-').isdigit():
+            chat_to_send = int(target_update_channel) if target_update_channel.lstrip('-').isdigit() else target_update_channel
+        else:
+            chat_to_send = target_update_channel
+
         await context.bot.send_message(
-            chat_id=int(target_update_channel) if target_update_channel.lstrip('-').isdigit() else target_update_channel,
+            chat_id=chat_to_send,
             text=caption_text,
             parse_mode="HTML",
             reply_markup=reply_markup
         )
-        logger.info(f"SQLite Dynamic auto post sent successfully to channel: {target_update_channel}!")
+        logger.info(f"Auto post sent successfully to channel: {target_update_channel}!")
     except Exception as e:
-        logger.error(f"Error sending dynamic auto post: {e}")
+        logger.error(f"Error sending auto post: {e}")
 
 def main():
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    
     if not TOKEN:
         raise ValueError("❌ TELEGRAM_BOT_TOKEN is missing in Environment Variables!")
     
     keep_alive()
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     setup_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern="^setup_channels$")],
         states={
-            GET_DB_CHANNEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_db_channel_step)],
             GET_UPDATE_CHANNEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_update_channel_step)],
+            GET_DB_CHANNEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_db_channel_step)],
+            GET_TARGET_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_target_link_step)],
+            GET_FILE_FORMAT: [CallbackQueryHandler(get_file_format_step, pattern="^fmt_")],
+            GET_TOP_HEADING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_top_heading_step)],
         },
         fallbacks=[CommandHandler("cancel", cancel_setup)]
     )
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("admins", admins_command))
     app.add_handler(setup_handler)
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.VIDEO | filters.Document.ALL | filters.TEXT), auto_post_handler))
 
-    print("SQLite Multi-Tenant Bot with Help Instructions is running...")
+    print("Bot is running with fully corrected setup steps and advanced file name cleaning...")
     app.run_polling()
 
 if __name__ == "__main__":
