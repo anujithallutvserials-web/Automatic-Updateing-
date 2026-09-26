@@ -151,13 +151,14 @@ GET_FILE_LINKS = [
 ]
 # ----------------------------------------
 
-# --- SQLITE DATABASE SETUP ---
+# --- SQLITE DATABASE SETUP (MULTI-CHANNEL SUPPORT) ---
 def init_db():
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS configs (
-            user_id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             update_channel TEXT,
             db_channel INTEGER,
             target_link TEXT,
@@ -175,9 +176,32 @@ def save_user_config(user_id, update_channel, db_channel, target_link, file_form
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR REPLACE INTO configs (user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading)
+        INSERT INTO configs (user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading))
+    conn.commit()
+    conn.close()
+
+def get_user_configs(user_id):
+    conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, update_channel, db_channel, target_link, file_format, banner_url, top_heading FROM configs WHERE user_id = ?', (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def get_config_by_id(config_id):
+    conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading FROM configs WHERE id = ?', (config_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+def delete_config_by_id(config_id):
+    conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM configs WHERE id = ?', (config_id,))
     conn.commit()
     conn.close()
 
@@ -214,16 +238,34 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"📥 You requested file details: {payload}\n\nFile delivery processing...")
             return
 
-    welcome_text = "Hi, I am an automatically update bot"
+    user_id = update.effective_user.id
+    configs = get_user_configs(user_id)
+
+    welcome_text = (
+        "👋 Welcome to the <b>Automatic Update & Media Bot</b>!\n\n"
+        "This bot helps you automatically format and forward your serial updates, videos, and files to your target update channels cleanly and professionally.\n\n"
+        "<b>Key Features & Formats:</b>\n"
+        "• <b>Photo Format (Banner + Details):</b> Sends a custom banner image at the top followed by details and an interactive button below it.\n"
+        "• <b>Video Format:</b> Forwards the video file directly with clean formatting and buttons.\n"
+        "• <b>Text Format:</b> Sends text-based updates with custom headings and target buttons.\n\n"
+        "Select your configured channel below or click <b>'+ Add Channel'</b> to add a new one."
+    )
     
-    keyboard = [
-        [InlineKeyboardButton("⚙️ Setup My Channels", callback_data="setup_channels")],
-        [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")],
-        [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]
-    ]
+    keyboard = []
+    for cfg in configs:
+        cfg_id, update_ch, _, _, _, _, _ = cfg
+        keyboard.append([InlineKeyboardButton(f"📢 {update_ch}", callback_data=f"manage_cfg_{cfg_id}")])
+    
+    keyboard.append([InlineKeyboardButton("➕ Add Channel", callback_data="setup_channels")])
+    keyboard.append([InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")])
+    keyboard.append([InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
+    if update.message:
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="HTML")
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(welcome_text, reply_markup=reply_markup, parse_mode="HTML")
 
 async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_text = (
@@ -238,14 +280,17 @@ async def admins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🤖 <b>Bot Help & Instructions Menu</b>\n\n"
-        "How to use this bot:\n"
-        "1️⃣ First, send your <b>Updates Channel ID</b> or Username.\n"
-        "2️⃣ Second, send your <b>Database Channel ID</b>.\n"
-        "3️⃣ Third, send your target link/ID.\n"
-        "4️⃣ Fourth, select your preferred <b>File Format</b> (Photo, Text or Video format).\n"
-        "5️⃣ Fifth, send your <b>Banner Image URL</b> (if Photo format selected).\n"
-        "6️⃣ Finally, send your custom <b>Top Heading</b> text.\n\n"
-        "💬 <b>Contact Owner:</b> @Anujith1238"
+        "How to use this bot properly:\n\n"
+        "1️⃣ <b>Updates Channel:</b> First send your target Updates Channel ID or Username (e.g., <code>-100xxxxxxxxxx</code> or <code>@yourchannel</code>).\n"
+        "2️⃣ <b>Database Channel:</b> Send your source Database Channel ID where raw files are uploaded.\n"
+        "3️⃣ <b>Target Link/ID:</b> Provide the destination link or ID that will be attached to the 'Get File' button.\n"
+        "4️⃣ <b>File Format Selection:</b> Choose how your posts should look:\n"
+        "   - <i>Photo Format (Banner + Details):</i> Displays a banner image at the top with formatted details below.\n"
+        "   - <i>Video Format:</i> Forwards the actual video with a clean caption.\n"
+        "   - <i>Text Format:</i> Sends a text update message.\n"
+        "5️⃣ <b>Banner Image URL:</b> If Photo format is chosen, provide a direct image link to serve as the banner background/header.\n"
+        "6️⃣ <b>Top Heading:</b> Enter your custom title/heading to appear at the top of every post.\n\n"
+        "💬 <b>Need Help? Contact Owner:</b> @Anujith1238"
     )
     keyboard = [[InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -263,16 +308,47 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return GET_UPDATE_CHANNEL
 
+    elif query.data.startswith("manage_cfg_"):
+        cfg_id = int(query.data.split("_")[2])
+        cfg = get_config_by_id(cfg_id)
+        if not cfg:
+            await query.message.edit_text("❌ Configuration not found.")
+            return
+
+        _, _, update_ch, db_ch, target_l, f_fmt, banner_u, top_h = cfg
+        details_text = (
+            "⚙️ <b>Channel Configuration Details</b>\n\n"
+            f"📢 <b>Updates Channel:</b> <code>{update_ch}</code>\n"
+            f"📁 <b>Database Channel:</b> <code>{db_ch}</code>\n"
+            f"🔗 <b>Target Link/ID:</b> <code>{target_l}</code>\n"
+            f"📄 <b>File Format:</b> <code>{f_fmt}</code>\n"
+            f"🖼 <b>Banner URL:</b> {banner_u if banner_u else 'None'}\n"
+            f"🏷 <b>Top Heading:</b> {top_h}"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🗑 Remove Channel", callback_data=f"remove_cfg_{cfg_id}")],
+            [InlineKeyboardButton("« Back", callback_data="back_home")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.edit_text(details_text, reply_markup=reply_markup, parse_mode="HTML")
+
+    elif query.data.startswith("remove_cfg_"):
+        cfg_id = int(query.data.split("_")[2])
+        delete_config_by_id(cfg_id)
+        await query.message.edit_text("✅ Channel configuration removed successfully!")
+        await start_command(update, context)
+
     elif query.data == "help_menu":
         help_text = (
             "🤖 <b>Bot Help & Instructions Menu</b>\n\n"
-            "How to use this bot:\n"
-            "1️⃣ First, send your <b>Updates Channel ID</b>.\n"
-            "2️⃣ Second, send your <b>Database Channel ID</b>.\n"
-            "3️⃣ Third, send your target link/ID.\n"
-            "4️⃣ Fourth, select your preferred <b>File Format</b>.\n"
-            "5️⃣ Fifth, send your <b>Banner Image URL</b>.\n"
-            "6️⃣ Finally, send your custom <b>Top Heading</b> text.\n"
+            "How to use this bot properly:\n\n"
+            "1️⃣ <b>Updates Channel:</b> Send your target Updates Channel ID.\n"
+            "2️⃣ <b>Database Channel:</b> Send your Database Channel ID.\n"
+            "3️⃣ <b>Target Link/ID:</b> Provide link for the button.\n"
+            "4️⃣ <b>File Format:</b> Select Photo, Video, or Text format.\n"
+            "5️⃣ <b>Banner Image URL:</b> Provide direct image link for photo banners.\n"
+            "6️⃣ <b>Top Heading:</b> Enter custom heading for your posts.\n\n"
+            "💬 <b>Contact Owner:</b> @Anujith1238"
         )
         keyboard = [
             [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")],
@@ -282,14 +358,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(help_text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif query.data == "back_home":
-        welcome_text = "Hi, I am an automatically update bot"
-        keyboard = [
-            [InlineKeyboardButton("⚙️ Setup My Channels", callback_data="setup_channels")],
-            [InlineKeyboardButton("❓ Help & Instructions", callback_data="help_menu")],
-            [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text(welcome_text, reply_markup=reply_markup)
+        await start_command(update, context)
 
 async def get_update_channel_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_input = update.message.text.strip()
@@ -331,7 +400,7 @@ async def get_target_link_step(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['temp_target_link'] = target_link_input
 
     keyboard = [
-        [InlineKeyboardButton("🖼 Photo Format", callback_data="fmt_photo")],
+        [InlineKeyboardButton("🖼 Photo Format (Banner + Details)", callback_data="fmt_photo")],
         [InlineKeyboardButton("📄 Text Format", callback_data="fmt_text")],
         [InlineKeyboardButton("🎬 Video Format", callback_data="fmt_video")]
     ]
@@ -354,7 +423,7 @@ async def get_file_format_step(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['temp_file_format'] = "Photo"
         await query.message.edit_text(
             "✅ Photo Format selected!\n\n"
-            "5️⃣ Please send the <b>Banner Image URL</b> (ചിത്രത്തിൽ കാണുന്നതുപോലെയുള്ള ലോഗോ/ബാനർ ഇമേജിന്റെ Direct Image Link അയക്കുക):",
+            "5️⃣ Please send the <b>Banner Image URL</b> (Send a direct image link/URL to use as the banner header):",
             parse_mode="HTML"
         )
         return GET_BANNER_URL
@@ -392,7 +461,7 @@ async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYP
     save_user_config(user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading)
 
     success_msg = (
-        "🎉 <b>Setup Successful!</b>\n\n"
+        "🎉 <b>Setup Successful! Channel Added.</b>\n\n"
         f"📢 <b>Updates Channel:</b> <code>{update_channel}</code>\n"
         f"📁 <b>Database Channel:</b> <code>{db_channel}</code>\n"
         f"🔗 <b>Target Link/ID:</b> <code>{target_link}</code>\n"
@@ -401,7 +470,7 @@ async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYP
         f"🏷 <b>Top Heading:</b> {top_heading}"
     )
 
-    keyboard = [[InlineKeyboardButton("⚙️ Setup Again", callback_data="setup_channels")]]
+    keyboard = [[InlineKeyboardButton("« Go to Home / Channels", callback_data="back_home")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(success_msg, reply_markup=reply_markup, parse_mode="HTML")
@@ -439,7 +508,6 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     detected_serial = None
     matched_key = None
     
-    # സീരിയൽ മാപ്പിംഗ് പരിശോധിക്കുന്നു
     for key, serial_name in SERIALS_MAPPING.items():
         formatted_key = key.replace("-", " ")
         if formatted_key in file_name_lower or key in file_name_lower:
@@ -450,11 +518,9 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not detected_serial:
         detected_serial = os.path.splitext(file_name)[0]
 
-    # സീസൺ കണ്ടെത്താൻ
     season_match = re.search(r'S(\d+)', file_name, re.IGNORECASE)
     season = season_match.group(1) if season_match else "-"
     
-    # എപ്പിസോഡ് റേഞ്ച് ഉൾപ്പെടെ കണ്ടെത്താൻ (ഉദാ: 50-60)
     episode_match = re.findall(r'E(\d+(?:-\d+)?)', file_name, re.IGNORECASE)
     if not episode_match:
         episode_match = re.findall(r'(\d+-\d+)', file_name)
@@ -467,7 +533,6 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     episode = episode_match[0] if episode_match else "-"
 
-    # ക്വാളിറ്റി കണ്ടെത്താൻ (ഡാഷ് ഇട്ട രീതിയിൽ)
     qualities = re.findall(r'(\d{3,4}p)', file_name, re.IGNORECASE)
     if qualities:
         quality = " - ".join(sorted(list(set(qualities))))
@@ -484,7 +549,6 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎬 <b>Quality :</b> {quality}"
     )
 
-    # ഗെറ്റ് ഫയൽ ലിങ്ക് കണ്ടുപിടിക്കാൻ
     get_file_url = None
     if matched_key:
         for link in GET_FILE_LINKS:
@@ -567,7 +631,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.VIDEO | filters.Document.ALL | filters.TEXT), auto_post_handler))
 
-    print("Bot is running successfully with Banner Image support...")
+    print("Bot is running successfully with multi-channel management & English instructions...")
     app.run_polling()
 
 if __name__ == "__main__":
