@@ -509,7 +509,7 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matched_key = None
     
     for key, serial_name in SERIALS_MAPPING.items():
-        formatted_key = key.replace("-", " ")
+        formatted_key = key.replace("_", " ")
         if formatted_key in file_name_lower or key in file_name_lower:
             detected_serial = serial_name
             matched_key = key
@@ -551,8 +551,11 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     get_file_url = None
     if matched_key:
+        # Normalize matched_key and link by removing hyphens/underscores to match accurately
+        clean_matched_key = matched_key.replace("_", "").replace("-", "").lower()
         for link in GET_FILE_LINKS:
-            if matched_key.replace("-", "").lower() in link.replace("-", "").lower():
+            clean_link = link.replace("-", "").replace("_", "").lower()
+            if clean_matched_key in clean_link:
                 get_file_url = link
                 break
     
@@ -631,7 +634,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.VIDEO | filters.Document.ALL | filters.TEXT), auto_post_handler))
 
-    print("Bot is running successfully with multi-channel management & English instructions...")
+    print("Bot is running successfully with multi-channel management & Get File fix...")
     app.run_polling()
 
 if __name__ == "__main__":
