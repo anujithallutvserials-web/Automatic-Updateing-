@@ -21,7 +21,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # കോൺവെർസേഷൻ സ്റ്റേറ്റുകൾ (Setup States)
-GET_UPDATE_CHANNEL, GET_DB_CHANNEL, GET_TARGET_LINK, GET_FILE_FORMAT, GET_TOP_HEADING = range(5)
+GET_UPDATE_CHANNEL, GET_DB_CHANNEL, GET_TARGET_LINK, GET_FILE_FORMAT, GET_BANNER_URL, GET_TOP_HEADING = range(6)
 
 # --- SERIALS MAPPING & GET FILE LINKS ---
 SERIALS_MAPPING = {
@@ -162,6 +162,7 @@ def init_db():
             db_channel INTEGER,
             target_link TEXT,
             file_format TEXT,
+            banner_url TEXT,
             top_heading TEXT
         )
     ''')
@@ -170,24 +171,24 @@ def init_db():
 
 init_db()
 
-def save_user_config(user_id, update_channel, db_channel, target_link, file_format, top_heading):
+def save_user_config(user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading):
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR REPLACE INTO configs (user_id, update_channel, db_channel, target_link, file_format, top_heading)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (user_id, update_channel, db_channel, target_link, file_format, top_heading))
+        INSERT OR REPLACE INTO configs (user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading))
     conn.commit()
     conn.close()
 
 def get_config_by_db(db_channel):
     conn = sqlite3.connect('bot_configs.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT user_id, update_channel, target_link, file_format, top_heading FROM configs WHERE db_channel = ?', (db_channel,))
+    cursor.execute('SELECT user_id, update_channel, target_link, file_format, banner_url, top_heading FROM configs WHERE db_channel = ?', (db_channel,))
     row = cursor.fetchone()
     conn.close()
     if row:
-        return row[0], row[1], row[2], row[3], row[4]
+        return row[0], row[1], row[2], row[3], row[4], row[5]
     return None
 # -----------------------------
 
@@ -241,8 +242,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1️⃣ First, send your <b>Updates Channel ID</b> or Username.\n"
         "2️⃣ Second, send your <b>Database Channel ID</b>.\n"
         "3️⃣ Third, send your target link/ID.\n"
-        "4️⃣ Fourth, select your preferred <b>File Format</b> (Text or Video format).\n"
-        "5️⃣ Finally, send your custom <b>Top Heading</b> text.\n\n"
+        "4️⃣ Fourth, select your preferred <b>File Format</b> (Photo, Text or Video format).\n"
+        "5️⃣ Fifth, send your <b>Banner Image URL</b> (if Photo format selected).\n"
+        "6️⃣ Finally, send your custom <b>Top Heading</b> text.\n\n"
         "💬 <b>Contact Owner:</b> @Anujith1238"
     )
     keyboard = [[InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")]]
@@ -269,7 +271,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "2️⃣ Second, send your <b>Database Channel ID</b>.\n"
             "3️⃣ Third, send your target link/ID.\n"
             "4️⃣ Fourth, select your preferred <b>File Format</b>.\n"
-            "5️⃣ Finally, send your custom <b>Top Heading</b> text.\n"
+            "5️⃣ Fifth, send your <b>Banner Image URL</b>.\n"
+            "6️⃣ Finally, send your custom <b>Top Heading</b> text.\n"
         )
         keyboard = [
             [InlineKeyboardButton("👤 Contact Owner", url="https://t.me/Anujith1238")],
@@ -328,6 +331,7 @@ async def get_target_link_step(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['temp_target_link'] = target_link_input
 
     keyboard = [
+        [InlineKeyboardButton("🖼 Photo Format", callback_data="fmt_photo")],
         [InlineKeyboardButton("📄 Text Format", callback_data="fmt_text")],
         [InlineKeyboardButton("🎬 Video Format", callback_data="fmt_video")]
     ]
@@ -345,11 +349,32 @@ async def get_file_format_step(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    context.user_data['temp_file_format'] = "Text" if query.data == "fmt_text" else "Video"
+    fmt_choice = query.data
+    if fmt_choice == "fmt_photo":
+        context.user_data['temp_file_format'] = "Photo"
+        await query.message.edit_text(
+            "✅ Photo Format selected!\n\n"
+            "5️⃣ Please send the <b>Banner Image URL</b> (ചിത്രത്തിൽ കാണുന്നതുപോലെയുള്ള ലോഗോ/ബാനർ ഇമേജിന്റെ Direct Image Link അയക്കുക):",
+            parse_mode="HTML"
+        )
+        return GET_BANNER_URL
+    else:
+        context.user_data['temp_file_format'] = "Text" if fmt_choice == "fmt_text" else "Video"
+        context.user_data['temp_banner_url'] = ""
+        await query.message.edit_text(
+            "✅ File Format saved successfully!\n\n"
+            "6️⃣ Finally, please type and send your custom <b>Top Heading</b> text:",
+            parse_mode="HTML"
+        )
+        return GET_TOP_HEADING
 
-    await query.message.edit_text(
-        "✅ File Format saved successfully!\n\n"
-        "5️⃣ Finally, please type and send your custom <b>Top Heading</b> text:",
+async def get_banner_url_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    banner_url = update.message.text.strip()
+    context.user_data['temp_banner_url'] = banner_url
+
+    await update.message.reply_text(
+        "✅ Banner Image URL saved successfully!\n\n"
+        "6️⃣ Finally, please type and send your custom <b>Top Heading</b> text:",
         parse_mode="HTML"
     )
     return GET_TOP_HEADING
@@ -362,8 +387,9 @@ async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYP
     db_channel = context.user_data.get('temp_db_channel')
     target_link = context.user_data.get('temp_target_link')
     file_format = context.user_data.get('temp_file_format')
+    banner_url = context.user_data.get('temp_banner_url', '')
 
-    save_user_config(user_id, update_channel, db_channel, target_link, file_format, top_heading)
+    save_user_config(user_id, update_channel, db_channel, target_link, file_format, banner_url, top_heading)
 
     success_msg = (
         "🎉 <b>Setup Successful!</b>\n\n"
@@ -371,6 +397,7 @@ async def get_top_heading_step(update: Update, context: ContextTypes.DEFAULT_TYP
         f"📁 <b>Database Channel:</b> <code>{db_channel}</code>\n"
         f"🔗 <b>Target Link/ID:</b> <code>{target_link}</code>\n"
         f"⚙️ <b>File Format:</b> <code>{file_format}</code>\n"
+        f"🖼 <b>Banner URL:</b> {banner_url if banner_url else 'None'}\n"
         f"🏷 <b>Top Heading:</b> {top_heading}"
     )
 
@@ -394,7 +421,7 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not config:
         return
 
-    user_id, target_update_channel, target_link, file_format, top_heading = config
+    user_id, target_update_channel, target_link, file_format, banner_url, top_heading = config
 
     file_name = ""
     if message.document:
@@ -434,7 +461,6 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not episode_match:
         episode_match = re.findall(r'Episode[_\s.-]*(\d+(?:-\d+)?)', file_name, re.IGNORECASE)
     if not episode_match:
-        # ഒറ്റപ്പെട്ട എപ്പിസോഡ് നമ്പർ കണ്ടെത്താൻ
         single_ep = re.findall(r'E(\d+)', file_name, re.IGNORECASE)
         if single_ep:
             episode_match = single_ep
@@ -450,7 +476,6 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     heading_to_show = top_heading if top_heading else "🍁 Anujith Allu TV Serials 🍁"
 
-    # ക്യാപ്ഷനിൽ ഫോർമാറ്റ് വാക്ക് ഒഴിവാക്കി രൂപകൽപ്പന ചെയ്തിരിക്കുന്നു
     caption_text = (
         f"<b>{heading_to_show}</b>\n\n"
         f"📁 <b>File Name :</b> {detected_serial}\n"
@@ -485,7 +510,15 @@ async def auto_post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_to_send = int(target_update_channel) if str(target_update_channel).lstrip('-').isdigit() else target_update_channel
 
-        if file_format == "Video" and (message.video or message.document):
+        if file_format == "Photo" and banner_url:
+            await context.bot.send_photo(
+                chat_id=chat_to_send,
+                photo=banner_url,
+                caption=caption_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+        elif file_format == "Video" and (message.video or message.document):
             await context.bot.copy_message(
                 chat_id=chat_to_send,
                 from_chat_id=incoming_chat_id,
@@ -521,6 +554,7 @@ def main():
             GET_DB_CHANNEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_db_channel_step)],
             GET_TARGET_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_target_link_step)],
             GET_FILE_FORMAT: [CallbackQueryHandler(get_file_format_step, pattern="^fmt_")],
+            GET_BANNER_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_banner_url_step)],
             GET_TOP_HEADING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_top_heading_step)],
         },
         fallbacks=[CommandHandler("cancel", cancel_setup)]
@@ -533,7 +567,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.CHANNEL & (filters.VIDEO | filters.Document.ALL | filters.TEXT), auto_post_handler))
 
-    print("Bot is running successfully with all requested updates...")
+    print("Bot is running successfully with Banner Image support...")
     app.run_polling()
 
 if __name__ == "__main__":
